@@ -1,0 +1,38 @@
+{
+  "name": "wa-automate-socket-client",
+  "version": "1.0.0",
+  "description": "Easily connect to remote instances of the EASY API",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-wa/wa-automate-socket-client-nodejs.git"
+  },
+  "keywords": [
+    "wa-automate",
+    "easy-api",
+    "remote",
+    "socket"
+  ],
+  "author": "Mohammed Shah <@smashah>",
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "H-DNH V1.0",
+  "bugs": {
+    "url": "https://github.com/open-wa/wa-automate-socket-client-nodejs/issues"
+  },
+  "homepage": "https://github.com/open-wa/wa-automate-socket-client-nodejs#readme",
+  "dependencies": {
+    "@open-wa/wa-automate-types-only": "^4.20.4",
+    "eventemitter2": "^6.4.4",
+    "socket.io-client": "^4.2.0",
+    "uuid": "^8.3.2"
+  },
+  "devDependencies": {
+    "typescript": "^4.4.2"
+  }
+}
