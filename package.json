@@ -1,5 +1,5 @@
 {
-  "name": "wa-automate-socket-client",
+  "name": "@open-wa/wa-automate-socket-client",
   "version": "1.0.1",
   "description": "Easily connect to remote instances of the EASY API",
   "main": "./dist/index.js",
