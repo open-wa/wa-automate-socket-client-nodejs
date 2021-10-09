@@ -69,20 +69,20 @@ export class SocketClient {
     } = {};
 
     /**
-     * The main way to create the socket baed client.
+     * The main way to create the socket based client.
      * @param url URL of the socket server (i.e the EASY API instance address)
      * @param apiKey optional api key if set
      * @returns SocketClient
      */
     static async connect(url: string, apiKey?: string, ev ?: boolean): Promise<SocketClient & Client> {
-        const client = new this(url, apiKey, ev)
         return await new Promise((resolve, reject) => {
+            const client = new this(url, apiKey, ev)
             client.socket.on("connect", () => {
                 console.log("Connected!", client.socket.id)
-                return resolve(client as any)
+                return resolve(client as SocketClient & Client)
             });
             client.socket.on("connect_error", reject);
-        })
+        });
     }
 
    public async createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : CollectorOptions) : Promise<MessageCollector> {
@@ -124,8 +124,8 @@ export class SocketClient {
             get: function get(target : SocketClient, prop : string) {
                 const o = Reflect.get(target, prop);
                 if(o) return o;
-                if (prop === 'then') {
-                  return Promise.prototype.then.bind(target);
+                if (prop === 'then' ) {
+                    return typeof target[prop] === "function" ? Promise.prototype.then.bind(target) : null;
                 }
                 if(prop.startsWith("on")) {
                   return async (callback : (data: unknown) => void) => target.listen(prop as SimpleListener,callback)
