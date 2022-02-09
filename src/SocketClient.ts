@@ -110,6 +110,9 @@ export class SocketClient {
             this.socket.emit("register_ev");
             this.socket.onAny((event, value)=>this.ev.emit(event, value))
         });
+        this.socket.on("connect_error", (err)=> {
+            console.error("Socket connection error", err.message, err["data"] || "")
+        });
         this.socket.io.on("reconnect", async () => {
             console.log("Reconnected!!")
             console.log(Object.keys(this.listeners))
