@@ -3,7 +3,7 @@ import { io, Socket } from "socket.io-client";
 import { Client, SimpleListener, Chat, ChatId, Message } from "@open-wa/wa-automate-types-only";
 import { v4 as uuidv4 } from 'uuid';
 import { MessageCollector } from './MessageCollector';
-import { CollectorFilter, CollectorOptions } from './Collector';
+import { AwaitMessagesOptions, Collection, CollectorFilter, CollectorOptions } from './Collector';
 
 /**
  * A convenience type that includes all keys from the `Client`.
@@ -78,18 +78,40 @@ export class SocketClient {
         return await new Promise((resolve, reject) => {
             const client = new this(url, apiKey, ev)
             client.socket.on("connect", () => {
-                console.log("Connected!", client.socket.id)
+                client._connected();
                 return resolve(client as SocketClient & Client)
             });
             client.socket.on("connect_error", reject);
         });
     }
 
-   public async createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : CollectorOptions) : Promise<MessageCollector> {
-    const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
-    return new MessageCollector(await this.ask('getSessionId') as string, await this.ask('getInstanceId') as string, chatId, filter, options, this.ev);
-   }
+    private _connected(){
+        console.log("Connected!", this.socket.id)
+        if(!this.ev) this.ev = new EventEmitter2({
+            wildcard:true
+        })
+        this.socket.emit("register_ev");
+        this.socket.onAny((event, value)=>this.ev.emit(event, value))
+    }
 
+    public async createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : CollectorOptions) : Promise<MessageCollector> {
+        const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
+        return new MessageCollector(await this.ask('getSessionId') as string, await this.ask('getInstanceId') as string, chatId, filter, options, this.ev);
+       }
+
+    public async awaitMessages(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : AwaitMessagesOptions = {}) : Promise<Collection<string,Message>> {
+        return new Promise( async (resolve, reject) => {
+           const collector = await this.createMessageCollector(c, filter, options);
+           collector.once('end', (collection, reason) => {
+             if (options.errors && options.errors.includes(reason)) {
+               reject(collection);
+             } else {
+               resolve(collection);
+             }
+           });
+         });
+       }
+       
     constructor(url: string, apiKey?: string, ev ?: boolean) {
         this.url = url;
         this.apiKey = apiKey
@@ -104,11 +126,7 @@ export class SocketClient {
         });
         if(ev)
         this.socket.on("connect", () => {
-            if(!this.ev) this.ev = new EventEmitter2({
-                wildcard:true
-            })
-            this.socket.emit("register_ev");
-            this.socket.onAny((event, value)=>this.ev.emit(event, value))
+            this._connected();
         });
         this.socket.on("connect_error", (err)=> {
             console.error("Socket connection error", err.message, err["data"] || "")
@@ -126,7 +144,7 @@ export class SocketClient {
         return new Proxy(this, {
             get: function get(target : SocketClient, prop : string) {
                 const o = Reflect.get(target, prop);
-                if(o) return o;
+                if(o || prop == "ev") return o;
                 if (prop === 'then' ) {
                     return typeof target[prop] === "function" ? Promise.prototype.then.bind(target) : null;
                 }
