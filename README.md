@@ -16,7 +16,7 @@ Note: `--socket` flag is required!!
 import {
   Client,
   SocketClient,
-} from "@open-wa/wa-automate";
+} from "@open-wa/wa-automate-socket-client";
 
 const NUMBER = 'TEST_PHONE_NUMBER@c.us'
 
