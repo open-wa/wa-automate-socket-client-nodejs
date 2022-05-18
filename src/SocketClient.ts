@@ -4,6 +4,8 @@ import { Client, SimpleListener, Chat, ChatId, Message } from "@open-wa/wa-autom
 import { v4 as uuidv4 } from 'uuid';
 import { MessageCollector } from './MessageCollector';
 import { AwaitMessagesOptions, Collection, CollectorFilter, CollectorOptions } from './Collector';
+import makeDebug from 'debug';
+const debug = makeDebug('wa:socket');
 
 /**
  * A convenience type that includes all keys from the `Client`.
@@ -86,7 +88,8 @@ export class SocketClient {
     }
 
     private _connected(){
-        console.log("Connected!", this.socket.id)
+        debug("connected", this.socket.id)
+        // console.log("Connected!", this.socket.id)
         if(!this.ev) this.ev = new EventEmitter2({
             wildcard:true
         })
@@ -129,18 +132,26 @@ export class SocketClient {
             this._connected();
         });
         this.socket.on("connect_error", (err)=> {
+            debug("connect_error", err)
             console.error("Socket connection error", err.message, err["data"] || "")
         });
         this.socket.io.on("reconnect", async () => {
-            console.log("Reconnected!!")
-            console.log(Object.keys(this.listeners))
+            // console.log("Reconnected!!")
+            debug("reconnected")
+            debug("Listeners, reregistering...", Object.keys(this.listeners))
             await Promise.all(Object.keys(this.listeners).map(async (listener: SimpleListener) => {
             await this.ask(listener)
             this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
             }))
         })
-        this.socket.io.on("reconnect_attempt", () => console.log("Reconnecting..."));
-        this.socket.on("disconnect", () => console.log("Disconnected from host!"));
+        this.socket.io.on("reconnect_attempt", () => {
+            debug("Reconnecting...")
+            // console.log("Reconnecting...")
+        });
+        this.socket.on("disconnect", () => {
+            debug("disconnected")
+            // console.log("Disconnected from host!")
+        });
         return new Proxy(this, {
             get: function get(target : SocketClient, prop : string) {
                 const o = Reflect.get(target, prop);
@@ -171,8 +182,14 @@ export class SocketClient {
     public async ask<M extends ClientMethods, P extends Parameters<Pick<Client, M>[M]>>(method: M, args?: any[] | P | {
         [k: string]: unknown
     }): Promise<unknown> {
+        debug("ask", method, args)
         // if (!this.socket.connected) return new Error("Socket not connected!")
-        return new Promise((resolve, reject) => {
+        return new Promise((_resolve, reject) => {
+            const resolve = (...args) => {
+                debug("resolve", method, args)
+                //@ts-ignore
+                _resolve(...args)
+            }
             if (typeof args !== "object" && !Array.isArray(args) && (typeof args === "string" || typeof args === "number")) args = [args] as any
             try {
                 // @ts-ignore
@@ -180,6 +197,7 @@ export class SocketClient {
                     args
                 }, resolve)
             } catch (error) {
+                debug("ask error", method, error)
                 reject(error)
             }
         })
@@ -192,6 +210,7 @@ export class SocketClient {
      * @returns The id of the callback
      */
     public async listen(listener: SimpleListener, callback: (data: unknown) => void): Promise<string> {
+        debug("listen", listener)
         // if (!this.socket.connected) throw new Error("Socket not connected!")
         const id = uuidv4()
         if (!this.listeners[listener]) {
@@ -211,6 +230,7 @@ export class SocketClient {
      * @returns boolean - true if the callback was found and discarded, false if the callback is not found
      */
     public stopListener(listener: SimpleListener, callbackId : string) : boolean {
+        debug("stop listener", callbackId)
         if(this.listeners[listener][callbackId]) {
             delete this.listeners[listener][callbackId];
             return true
