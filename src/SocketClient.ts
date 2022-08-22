@@ -1,6 +1,6 @@
 import { EventEmitter2 } from 'eventemitter2';
 import { io, Socket } from "socket.io-client";
-import { Client, SimpleListener, Chat, ChatId, Message } from "@open-wa/wa-automate-types-only";
+import { Client as _Client, SimpleListener, Chat, ChatId, Message } from "@open-wa/wa-automate-types-only";
 import { v4 as uuidv4 } from 'uuid';
 import { MessageCollector } from './MessageCollector';
 import { AwaitMessagesOptions, Collection, CollectorFilter, CollectorOptions } from './Collector';
@@ -10,7 +10,8 @@ const debug = makeDebug('wa:socket');
 /**
  * A convenience type that includes all keys from the `Client`.
  */
-export type ClientMethods = keyof Client;
+export type ClientMethods = keyof _Client;
+export type Client = _Client;
 
 /**
  * [ALPHA - API will 100% change in the near future. Don't say I didn't warn you.]
