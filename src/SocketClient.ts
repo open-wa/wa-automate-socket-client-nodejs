@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { MessageCollector } from './MessageCollector';
 import { AwaitMessagesOptions, Collection, CollectorFilter, CollectorOptions } from './Collector';
 import makeDebug from 'debug';
+import {betterRetry, Options} from "better-retry";
 const debug = makeDebug('wa:socket');
 
 /**
@@ -75,9 +76,15 @@ export class SocketClient {
      * The main way to create the socket based client.
      * @param url URL of the socket server (i.e the EASY API instance address)
      * @param apiKey optional api key if set
+     * @param ev whether it should wait for the connect event when constructing the client, defaults to false
+     * @param retryOptions options for p-retry, defaults to {retries: 5, minTimeout: 3000, maxTimeout: 5000, factor: 2}
      * @returns SocketClient
      */
-    static async connect(url: string, apiKey?: string, ev ?: boolean): Promise<SocketClient & Client> {
+    static async connect(url: string, apiKey?: string, ev?: boolean, retryOptions: Options = {retries: 5, minTimeout: 3000, maxTimeout: 5000, factor: 2}): Promise<SocketClient & Client> {
+        return await betterRetry(() => this._connect(url, apiKey, ev), retryOptions)
+    }
+
+    private static async _connect(url: string, apiKey?: string, ev ?: boolean): Promise<SocketClient & Client> {
         return await new Promise((resolve, reject) => {
             const client = new this(url, apiKey, ev)
             client.socket.on("connect", () => {
@@ -115,7 +122,7 @@ export class SocketClient {
            });
          });
        }
-       
+
     constructor(url: string, apiKey?: string, ev ?: boolean) {
         this.url = url;
         this.apiKey = apiKey

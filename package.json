@@ -29,12 +29,14 @@
   "dependencies": {
     "@discordjs/collection": "^0.5.0",
     "@open-wa/wa-automate-types-only": "*",
+    "better-retry": "^1.0.0",
     "debug": "^4.3.4",
     "eventemitter2": "^6.4.9",
     "socket.io-client": "^4.5.4",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@types/node": "^18.11.18",
     "typescript": "^4.5.5"
   }
 }
