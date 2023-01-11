@@ -29,7 +29,7 @@
   "dependencies": {
     "@discordjs/collection": "^0.5.0",
     "@open-wa/wa-automate-types-only": "*",
-    "better-retry": "^1.0.0",
+    "better-retry": "^1.0.1",
     "debug": "^4.3.4",
     "eventemitter2": "^6.4.9",
     "socket.io-client": "^4.5.4",
