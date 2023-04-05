@@ -70,6 +70,7 @@ export class SocketClient {
             [id : string] : (data: any) => any
         }
     } = {};
+    private isListenerRegistered: boolean;
 
     /**
      * The main way to create the socket based client.
@@ -90,12 +91,15 @@ export class SocketClient {
 
     private _connected(){
         debug("connected", this.socket.id)
-        // console.log("Connected!", this.socket.id)
-        if(!this.ev) this.ev = new EventEmitter2({
-            wildcard:true
-        })
-        this.socket.emit("register_ev");
-        this.socket.onAny((event, value)=>this.ev.emit(event, value))
+
+        if (!this.isListenerRegistered) {
+            if(!this.ev) this.ev = new EventEmitter2({
+                wildcard:true
+            })
+            this.socket.emit("register_ev");
+            this.socket.onAny((event, value)=>this.ev.emit(event, value))
+            this.isListenerRegistered = true;
+        }
     }
 
     public async createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : CollectorOptions) : Promise<MessageCollector> {
