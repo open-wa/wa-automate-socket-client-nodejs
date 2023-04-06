@@ -61,13 +61,16 @@ export class SocketClient {
     url: string;
     apiKey: string;
     socket: Socket;
+    flushListenersOnDisconnect: boolean = true;
     /**
      * A local version of the `ev` EventEmitter2
      */
-    ev : EventEmitter2;
+    ev: EventEmitter2 = new EventEmitter2({
+        wildcard: true
+    })
     listeners: {
-        [listener in SimpleListener] ?: {
-            [id : string] : (data: any) => any
+        [listener in SimpleListener]?: {
+            [id: string]: (data: any) => any
         }
     } = {};
     private isListenerRegistered: boolean;
@@ -78,76 +81,98 @@ export class SocketClient {
      * @param apiKey optional api key if set
      * @returns SocketClient
      */
-    static async connect(url: string, apiKey?: string, ev ?: boolean): Promise<SocketClient & Client> {
+    static async connect(url: string, apiKey?: string, ev?: boolean): Promise<SocketClient & Client> {
         return await new Promise((resolve, reject) => {
-            const client = new this(url, apiKey, ev)
-            client.socket.on("connect", () => {
-                client._connected();
+            const client = new this(url, apiKey, ev, false)
+            client.socket.on("connect", async () => {
+                await client._connected();
                 return resolve(client as SocketClient & Client)
             });
             client.socket.on("connect_error", reject);
         });
     }
 
-    private _connected(){
-        debug("connected", this.socket.id)
-
-        if (!this.isListenerRegistered) {
-            if(!this.ev) this.ev = new EventEmitter2({
-                wildcard:true
-            })
-            this.socket.emit("register_ev");
-            this.socket.onAny((event, value)=>this.ev.emit(event, value))
-            this.isListenerRegistered = true;
-        }
+    private async _connected() {
+        debug("_connected", this.socket.id)
+        if (!this.ev) this.ev = new EventEmitter2({
+            wildcard: true
+        })
+        this.socket.emit("register_ev");
+        this.socket.onAny((event, value) => this.ev.emit(event, value))
+        await this._ensureListenersRegistered();
     }
 
-    public async createMessageCollector(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : CollectorOptions) : Promise<MessageCollector> {
-        const chatId : ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
-        return new MessageCollector(await this.ask('getSessionId') as string, await this.ask('getInstanceId') as string, chatId, filter, options, this.ev);
-       }
+    /**
+     * Disconnect the socket
+     */
+    public disconnect(): void {
+        this.socket.disconnect();
+    }
 
-    public async awaitMessages(c : Message | ChatId | Chat, filter : CollectorFilter<[Message]>, options : AwaitMessagesOptions = {}) : Promise<Collection<string,Message>> {
-        return new Promise( async (resolve, reject) => {
-           const collector = await this.createMessageCollector(c, filter, options);
-           collector.once('end', (collection, reason) => {
-             if (options.errors && options.errors.includes(reason)) {
-               reject(collection);
-             } else {
-               resolve(collection);
-             }
-           });
-         });
-       }
-       
-    constructor(url: string, apiKey?: string, ev ?: boolean) {
+    /**
+     * Reconnect the socket
+     */
+    public async reconnect(): Promise<void> {
+        return new Promise((resolve) => {
+            this.socket.connect();
+            this.socket.on("connect", async () => {
+                await this._connected();
+                resolve();
+            });
+        });
+    }
+
+    public async createMessageCollector(c: Message | ChatId | Chat, filter: CollectorFilter<[Message]>, options: CollectorOptions): Promise<MessageCollector> {
+        const chatId: ChatId = ((c as Message)?.chat?.id || (c as Chat)?.id || c) as ChatId;
+        return new MessageCollector(await this.ask('getSessionId') as string, await this.ask('getInstanceId') as string, chatId, filter, options, this.ev);
+    }
+
+    public async awaitMessages(c: Message | ChatId | Chat, filter: CollectorFilter<[Message]>, options: AwaitMessagesOptions = {}): Promise<Collection<string, Message>> {
+        return new Promise(async (resolve, reject) => {
+            const collector = await this.createMessageCollector(c, filter, options);
+            collector.once('end', (collection, reason) => {
+                if (options.errors && options.errors.includes(reason)) {
+                    reject(collection);
+                } else {
+                    resolve(collection);
+                }
+            });
+        });
+    }
+
+    /**
+     * 
+     * @param url The URL of the socket server (i.e the EASY API instance address)
+     * @param apiKey The API key if set (with -k flag)
+     * @param ev I forgot what this is for.
+     * @param flushListenersOnDisconnect If true, all listeners will be removed when the socket disconnects. If false, they will be kept and re-registered when the socket reconnects.
+     * @returns 
+     */
+    constructor(url: string, apiKey?: string, ev?: boolean, flushListenersOnDisconnect?: boolean) {
         this.url = url;
         this.apiKey = apiKey
+        this.flushListenersOnDisconnect = flushListenersOnDisconnect;
         const _url = new URL(url)
         const _path = _url.pathname.replace(/\/$/, "")
         this.socket = io(_url.origin, {
-          autoConnect: true,
-          auth: {
-            apiKey
-          },
-          path: _path ? `${_path}/socket.io/` : undefined
+            autoConnect: true,
+            auth: {
+                apiKey
+            },
+            path: _path ? `${_path}/socket.io/` : undefined
         });
-        if(ev)
-        this.socket.on("connect", () => {
-            this._connected();
-        });
-        this.socket.on("connect_error", (err)=> {
+        if (ev)
+            this.socket.on("connect", async () => {
+                await this._connected();
+            });
+        this.socket.on("connect_error", (err) => {
             debug("connect_error", err)
             console.error("Socket connection error", err.message, err["data"] || "")
         });
         this.socket.io.on("reconnect", async () => {
             // console.log("Reconnected!!")
             debug("reconnected")
-            debug("Listeners, reregistering...", Object.keys(this.listeners))
-            await Promise.all(Object.keys(this.listeners).map(async (listener: SimpleListener) => {
-            await this.ask(listener)
-            this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
-            }))
+            this._ensureListenersRegistered();
         })
         this.socket.io.on("reconnect_attempt", () => {
             debug("Reconnecting...")
@@ -155,28 +180,57 @@ export class SocketClient {
         });
         this.socket.on("disconnect", () => {
             debug("disconnected")
+            if(this.flushListenersOnDisconnect) this.flushListeners();
             // console.log("Disconnected from host!")
         });
         return new Proxy(this, {
-            get: function get(target : SocketClient, prop : string) {
+            get: function get(target: SocketClient, prop: string) {
                 const o = Reflect.get(target, prop);
-                if(o || prop == "ev") return o;
-                if (prop === 'then' ) {
+                if (o || prop == "ev") return o;
+                if (prop === 'then') {
                     return typeof target[prop] === "function" ? Promise.prototype.then.bind(target) : null;
                 }
-                if(prop.startsWith("on")) {
-                  return async (callback : (data: unknown) => void) => target.listen(prop as SimpleListener,callback)
+                if (prop.startsWith("on")) {
+                    return async (callback: (data: unknown) => void) => target.listen(prop as SimpleListener, callback)
                 } else {
-                  return async (...args : any[]) => {
-                    return target.ask(prop as keyof Client,args.length==1 && typeof args[0] == "object" ? {
-                      ...args[0]
-                    } : [
-                      ...args
-                    ] as any)
-                  }
+                    return async (...args: any[]) => {
+                        return target.ask(prop as keyof Client, args.length == 1 && typeof args[0] == "object" ? {
+                            ...args[0]
+                        } : [
+                            ...args
+                        ] as any)
+                    }
                 }
             }
         }) as Client & SocketClient
+    }
+
+    private async _ensureListenersRegistered() {
+        debug("Listeners, reregistering...", this.listeners)
+        await Promise.all(Object.keys(this.listeners).map(async (listener: SimpleListener) => {
+            await this.ask(listener)
+            if (!this.socket.listeners(listener).length) {
+                this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
+            }
+        }))
+    }
+
+    /**
+     * Remove all internal event listeners
+     */
+    public async flushListeners() {
+        debug("Listeners, flushing...")
+        this.listeners = {}
+    }
+
+    /**
+     * A convenience method for the socket connected event.
+     * @param callback The callback to be called when the socket is connected
+     */
+    public async onConnected(callback: () => void) {
+        await this._connected()
+        if (this.socket.connected) callback();
+        else this.socket.on("connect", callback)
     }
 
     //awaiting tuple label getter to reimplement this
@@ -221,7 +275,7 @@ export class SocketClient {
         if (!this.listeners[listener]) {
             this.listeners[listener] = {};
             await this.ask(listener)
-            this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
+            if (!this.socket.listeners(listener).length) this.socket.on(listener, async data => await Promise.all(Object.entries(this.listeners[listener]).map(([, callback]) => callback(data))))
         }
         this.listeners[listener][id] = callback;
         return id
@@ -234,9 +288,9 @@ export class SocketClient {
      * @param callbackId The ID from `listen`
      * @returns boolean - true if the callback was found and discarded, false if the callback is not found
      */
-    public stopListener(listener: SimpleListener, callbackId : string) : boolean {
+    public stopListener(listener: SimpleListener, callbackId: string): boolean {
         debug("stop listener", callbackId)
-        if(this.listeners[listener][callbackId]) {
+        if (this.listeners[listener][callbackId]) {
             delete this.listeners[listener][callbackId];
             return true
         }
