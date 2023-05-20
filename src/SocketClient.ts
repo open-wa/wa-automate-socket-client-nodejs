@@ -97,6 +97,10 @@ export class SocketClient {
         if (!this.ev) this.ev = new EventEmitter2({
             wildcard: true
         })
+        process.on('SIGINT', () => {
+            this.close()
+            process.exit();
+        }); 
         this.socket.emit("register_ev");
         this.socket.onAny((event, value) => this.ev.emit(event, value))
         await this._ensureListenersRegistered();
@@ -107,6 +111,21 @@ export class SocketClient {
      */
     public disconnect(): void {
         this.socket.disconnect();
+    }
+
+    /**
+     * Close the socket. Prevents not being able to close the node process.
+     */
+    public close(): void {
+        this.socket.close();
+    }
+
+    /**
+     * Attempt to kill the session and close the socket
+     */
+     public async killSession(): Promise<void> {
+        await this.ask("kill");
+        this.socket.close();
     }
 
     /**

@@ -1,8 +1,8 @@
 const { SocketClient } = require('../dist/index.js')
 
-const EASY_API_ADDR = "http://localhost:8002"
+const EASY_API_ADDR = "http://localhost:8060"
 
-const TEST_NUM = "________@c.us"
+const TEST_NUM = "447858117129@c.us"
 
 const test = async () => {
     console.log('Starting')

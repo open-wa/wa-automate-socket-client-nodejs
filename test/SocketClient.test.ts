@@ -78,3 +78,9 @@ test("should not emit onMessage listener twice upon reconnection", async () => {
   // Remove the listener
   client.stopListener("onAnyMessage", listenerId);
 });
+
+
+// test("Should close the socket and allow process to exit", async () => {
+//   await client.close();
+//   expect(client.socket.connected).toBe(false);
+// })
